@@ -7,7 +7,7 @@ on:
       - develop
       - main
 
-# Dica do LAB: Uso de variáveis globais para evitar repetição
+# Variável global recomendada para evitar repetição no código
 env:
   IMAGE_NAME: "api-fastapi-app"
 
@@ -28,43 +28,52 @@ jobs:
         run: |
           echo "Construindo a imagem Docker: ${{ env.IMAGE_NAME }}"
 
-  # 2. Job de Deploy em Homologação (Automático)
+  # 2. Job de Deploy em Homologação (Automático na branch develop)
   deploy_homologacao:
     needs: build_and_test
-    # Regra do LAB: Só roda se o push for na branch 'develop'
+    # Regra: Só roda se o push/merge for na branch 'develop'
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy em Produção via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "Conectado na EC2 para Homologação!"
-            echo "Subindo a aplicação automaticamente na porta 8080..."
-            # O comando real de docker que rodaria aqui na porta 8080 conforme o LAB:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Executar Deploy em Homologação via SSH Nativo
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/id_rsa ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            echo "Conectado com sucesso na EC2 de HOMOLOGAÇÃO!"
+            echo "Subindo aplicação na porta 8080..."
             # docker run -d -p 8080:8000 ${{ env.IMAGE_NAME }}
+          EOF
 
   # 3. Job de Deploy em Produção (Controlado e com Aprovação Manual)
   deploy_producao:
     needs: build_and_test
-    # Regra do LAB: Só roda se o push/merge for na branch 'main'
+    # Regra do LAB: Garante que produção só ativa na branch main
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     # Vincula ao Environment do GitHub para exigir a aprovação manual
     environment: production
     
     steps:
-      - name: Deploy em Produção via SSH
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.EC2_HOST }}
-          username: ${{ secrets.EC2_USERNAME }}
-          key: ${{ secrets.EC2_SSH_KEY }}
-          script: |
-            echo "Conectado na EC2 para PRODUÇÃO!"
-            echo "Subindo a aplicação no ambiente de produção..."
-            # O comando real de docker que rodaria aqui na porta padrão de produção:
-            # docker run -d -p 8000:8000 ${{ env.IMAGE_NAME }}
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Executar Deploy em Produção via SSH Nativo
+        run: |
+          # 1. Configura a chave privada temporariamente no ambiente do GitHub
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          
+          # 2. Executa a conexão SSH nativa com timeout estendido e ignorando checagem estrita de chaves
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 -i ~/.ssh/id_rsa ${{ secrets.EC2_USERNAME }}@${{ secrets.EC2_HOST }} << 'EOF'
+            echo "Conectado com sucesso na EC2 de PRODUÇÃO!"
+            echo "Listando containers ativos na máquina:"
+            docker ps
+            # Seus comandos futuros de deploy em produção entram aqui
+          EOF

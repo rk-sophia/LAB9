@@ -35,8 +35,8 @@ jobs:
     if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy em Homologação via SSH
-        uses: appleboy/ssh-action@master
+      - name: Deploy em Produção via SSH
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
